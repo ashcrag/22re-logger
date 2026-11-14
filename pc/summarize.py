@@ -99,6 +99,43 @@ def settle_time(rows, t_release, base_rpm, until):
     return None
 
 
+def pct(rows, key):
+    v = [r[key] for r in rows if r.get(key) is not None]
+    return None if not v else sum(1 for x in v if x == 1) / len(v) * 100
+
+
+def summarize_1uz(rows, idle):
+    """1UZ extras: engine computer stream, second igniter, cam/crank phase."""
+    frames = [r for r in rows if r.get("ecu_age_s") is not None and r["ecu_age_s"] == 0.0]
+    print("\nengine computer stream (VF1): %d frames" % len(frames))
+    if not frames:
+        print("  none decoded: TE2 not jumped, VF1 not tapped, or the stream isn't there on this computer")
+    else:
+        last = frames[-1]
+        print("  last frame: rpm %s, ect %s C, tps %s%%, timing %s, inj %s ms, iac %s%%" % (
+            fmt(last.get("ecu_rpm"), "%.0f"), fmt(last.get("ecu_ect_c"), "%.0f"), fmt(last.get("ecu_tps_pct"), "%.0f"),
+            fmt(last.get("ecu_timing"), "%.1f"), fmt(last.get("ecu_inj_ms"), "%.2f"), fmt(last.get("ecu_iac_pct"), "%.0f")))
+        idle_frames = [r for r in idle if r.get("ecu_age_s") == 0.0]
+        for key, label in (("ecu_closed_loop", "closed loop"), ("ecu_idle", "idle flag"),
+                           ("ecu_neutral", "neutral flag"), ("ecu_knock", "knock flag"), ("ecu_ac", "A/C flag")):
+            p = pct(idle_frames, key)
+            if p is not None:
+                print("  at idle, %s set in %.0f%% of frames" % (label, p))
+        pairs = [(r["ecu_rpm"], r["rpm"]) for r in frames if r.get("ecu_rpm") and r.get("rpm")]
+        if pairs:
+            diff = statistics.median(abs(a - b) for a, b in pairs)
+            print("  ECU rpm vs measured rpm: median difference %.0f rpm%s" % (
+                diff, "  (byte map may be off for this computer)" if diff > 150 else ""))
+        print("  note: the byte map is from 4-cylinder Toyotas and unverified on the 1UZ; check against known values")
+    bad = [r for r in rows if r.get("ig2_ok") == 0 and (r.get("rpm") or 0) > 0]
+    if bad:
+        print("  igniters: IGT1 and IGT2 disagree in %d rows (one igniter line dead or untapped)" % len(bad))
+    ph = vals(idle, "g1_phase_deg")
+    if ph:
+        print("  G1 cam vs Ne crank phase at idle: median %.1f deg, spread %.1f deg (compare with a known-good engine)" % (
+            statistics.median(ph), statistics.pstdev(ph)))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("csv")
@@ -110,6 +147,8 @@ def main():
     rows = [r for r in load(args.csv) if r["t_s"] is not None]
     if not rows:
         sys.exit("no rows")
+    is_1uz = "ecu_raw" in rows[0]
+    air_unit = "Hz (KS)" if is_1uz else "V (VS)"
     print("file: %s" % args.csv)
     print("duration %.1f s, %d rows" % (rows[-1]["t_s"] - rows[0]["t_s"], len(rows)))
     have_timing = any(r["tm"] is not None for r in rows)
@@ -134,13 +173,17 @@ def main():
     if base_rpm:
         rpms = vals(idle, "rpm")
         print("  rpm median %.0f, range %.0f-%.0f" % (base_rpm, min(rpms), max(rpms)))
-    print("  timing %s deg   inj %s ms   vs %s V   ox mean %s V   batt %s V" % (
-        fmt(med(idle, "tm")), fmt(mean(idle, "inj_ms"), "%.2f"), fmt(mean(idle, "vs"), "%.2f"),
-        fmt(mean(idle, "ox"), "%.2f"), fmt(mean(idle, "batt"), "%.1f")))
-    oxs = vals(idle, "ox")
-    if oxs:
-        lean = sum(1 for v in oxs if v < config.OX_SWITCH_V) / len(oxs) * 100
-        print("  ox below %.2f V (lean side) %.0f%% of the time" % (config.OX_SWITCH_V, lean))
+    print("  timing %s deg   inj %s ms   airflow %s %s   batt %s V" % (
+        fmt(med(idle, "tm")), fmt(mean(idle, "inj_ms"), "%.2f"), fmt(mean(idle, "airflow"), "%.2f"),
+        air_unit, fmt(mean(idle, "batt"), "%.1f")))
+    for key in ("ox", "ox2"):
+        oxs = vals(idle, key)
+        if oxs:
+            lean = sum(1 for v in oxs if v < config.OX_SWITCH_V) / len(oxs) * 100
+            print("  %s mean %.2f V, below %.2f V (lean side) %.0f%% of the time" % (
+                key, statistics.fmean(oxs), config.OX_SWITCH_V, lean))
+    if is_1uz:
+        summarize_1uz(rows, idle)
 
     if not events:
         print("\nno rev events above %.0f rpm held %.1f s" % (args.rev_rpm, args.min_hold))
@@ -184,9 +227,9 @@ def main():
         if e_ox:
             lean = sum(1 for v in e_ox if v < config.OX_SWITCH_V) / len(e_ox) * 100
             print("  ox: first 3 s mean %.2f V, lean side %.0f%% of the time" % (statistics.fmean(e_ox), lean))
-        e_vs, b_vs = mean(early, "vs"), mean(pre, "vs")
-        if e_vs is not None and b_vs is not None:
-            print("  vs: first 3 s %.2f V vs %.2f V pre-rev" % (e_vs, b_vs))
+        e_air, b_air = mean(early, "airflow"), mean(pre, "airflow")
+        if e_air is not None and b_air is not None:
+            print("  airflow: first 3 s %.2f vs %.2f %s pre-rev" % (e_air, b_air, air_unit))
         idl_open = [r for r in post if r.get("idl_closed") == 0]
         if idl_open and len(idl_open) < len(post):
             print("  idl: open for %.1f s of the window after release" % (len(idl_open) / len(post) * (until - release)))
@@ -195,9 +238,10 @@ def main():
             print("  batt: min %.1f V" % min(b))
 
     if have_timing:
-        print("\nnote: without the T-E1 jumper the ECU changes timing on its own after a rev,")
-        print("so a timing swing alone does not separate ECU command from chain slack.")
-        print("Run the jumpered test in docs/test-plan.md for that.")
+        jumper = "TE1-E1" if is_1uz else "T-E1"
+        print("\nnote: without the %s jumper the ECU changes timing on its own after a rev," % jumper)
+        print("so a timing swing alone does not separate ECU command from a mechanical cause.")
+        print("Run the jumpered test in the engine's docs/<engine>/test-plan.md for that.")
 
 
 if __name__ == "__main__":

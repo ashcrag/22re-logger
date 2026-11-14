@@ -43,7 +43,7 @@ ECU pin ----[47k]----+---- Nano pin
 GND -----------------+------+--------+
 ```
 
-Divider ratio 4.133 (already set in `pc/config.py`). 15 V in reads 3.63 V at the pin.
+Divider ratio 4.133 (already set in `pc/profiles/p22re.py`). 15 V in reads 3.63 V at the pin.
 
 ### IGT (ECU to igniter): D3
 

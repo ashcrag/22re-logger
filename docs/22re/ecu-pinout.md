@@ -2,7 +2,7 @@
 
 Fill this in from the factory wiring diagram (EWD) for the exact vehicle, then confirm every pin with a multimeter. Nothing in the "ECU pin" or "wire color" columns is trustworthy until it comes from the EWD; terminal names below are the usual Toyota ones and still need checking against the diagram.
 
-Measure each signal **key on, engine off** and **engine idling warm**, and for VS/VTA also during a rev. If any reading can go over 5 V, it uses the divided input (docs/hardware.md), and its `divider` in `pc/config.py` must match.
+Measure each signal **key on, engine off** and **engine idling warm**, and for VS/VTA also during a rev. If any reading can go over 5 V, it uses the divided input (docs/22re/hardware.md), and its `divider` in `pc/profiles/p22re.py` must match.
 
 Vehicle: ______  Engine: 22R-E  EWD source: ______  Date measured: ______
 

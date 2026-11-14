@@ -1,6 +1,6 @@
 logs/*
 !logs/.gitkeep
-calibration.json
+calibration_*.json
 __pycache__/
 .venv/
 *.pyc

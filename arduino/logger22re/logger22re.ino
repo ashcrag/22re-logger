@@ -1,4 +1,4 @@
-// 22re-logger firmware: passive signal logger for a Toyota 22R-E engine.
+// toyota-tap-logger, 22R-E firmware: passive signal logger for a Toyota 22R-E engine.
 //
 // READ ONLY. No pin that connects to the car is ever set as an output.
 // The only outputs are the bench simulator pins D9-D11, and they stay
@@ -26,7 +26,7 @@
 
 #include <Arduino.h>
 
-#define FW_ID "22RE-LOGGER 0.1"
+#define FW_ID "TAP-LOGGER 22RE 0.2"
 
 // ---- car inputs ----
 const uint8_t PIN_CRANK = 2;  // INT0  crank pickup (hall, active low)

@@ -24,7 +24,8 @@ TRACES = [
     ("timing", "timing deg"),
     ("inj_ms", "inj ms"),
     ("ox", "O2 V"),
-    ("vs", "VS V"),
+    ("ox2", "O2 bank 2 V"),
+    ("airflow", "airflow"),
     ("vta", "VTA V"),
     ("idl_closed", "IDL closed"),
     ("batt", "+B V"),
@@ -64,6 +65,9 @@ def main():
                 y = [None if num(r["spark_angle_raw"]) is None else -num(r["spark_angle_raw"]) for r in rows]
                 label = "timing (uncal.)"
         else:
+            if key not in rows[0]:
+                ax.set_visible(False)
+                continue
             y = [num(r.get(key)) for r in rows]
         ax.plot(t, [float("nan") if v is None else v for v in y], lw=0.8)
         ax.set_ylabel(label, fontsize=8)
